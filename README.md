@@ -128,6 +128,17 @@ https://gitlab.yourcompany.com
 
 ---
 
+## Project structure
+
+```
+mr-review-assistant/
+├── index.html    # Markup and layout
+├── styles.css    # All styles, CSS variables, dark mode
+└── app.js        # All JavaScript — GitLab API, Claude API, UI logic
+```
+
+---
+
 ## Tech stack
 
 - **Pure HTML/CSS/JS** — zero dependencies, no build step, works offline after first load
