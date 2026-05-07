@@ -154,4 +154,4 @@ PRs welcome! Please open an issue first to discuss what you'd like to change.
 
 ## License
 
-MIT © [Krishnendu Biswas](https://github.com/krishnendubiswas)
+MIT © [Priyam Sengupta](https://github.com/PriyamSengupta)
