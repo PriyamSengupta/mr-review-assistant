@@ -1,5 +1,10 @@
 .DS_Store
 Thumbs.db
+
+# Environment — keep .env.example committed as a template
+.env
+.env.local
+.env.*.local
 *.env
-.env*
+
 node_modules/
