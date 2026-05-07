@@ -25,7 +25,7 @@ After reviewing, it can **auto-post the review as a comment** directly on your G
 
 ## Screenshot
 
-![MR Review Assistant Screenshot](screenshot.png)
+![MR Review Assistant Screenshot](public/Screenshot.png)
 
 ---
 
