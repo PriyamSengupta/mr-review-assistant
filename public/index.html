@@ -21,40 +21,9 @@
     <div class="hbadge">v1.1</div>
   </div>
 
-  <!-- Step 1: API Keys -->
+  <!-- Step 1: Input mode -->
   <div class="card">
-    <div class="card-title">Step 1 — API keys</div>
-    <div class="row2">
-      <div class="field">
-        <label for="anthropic-key">Anthropic API key</label>
-        <input type="password" id="anthropic-key" placeholder="sk-ant-..." autocomplete="off" />
-      </div>
-      <div class="field">
-        <label for="gh-token">GitHub personal access token</label>
-        <input type="password" id="gh-token" placeholder="ghp_..." autocomplete="off" />
-      </div>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label for="gl-token">GitLab personal access token</label>
-        <input type="password" id="gl-token" placeholder="glpat-..." autocomplete="off" />
-      </div>
-      <div class="field">
-        <label for="gl-host">GitLab instance URL</label>
-        <input type="text" id="gl-host" value="https://gitlab.com" />
-      </div>
-    </div>
-    <div class="hint">
-      Keys are stored only in your browser session and never sent anywhere except the respective APIs.
-      &nbsp;·&nbsp; <a href="https://console.anthropic.com/settings/keys" target="_blank">Get Anthropic key →</a>
-      &nbsp;·&nbsp; <a href="https://github.com/settings/tokens" target="_blank">GitHub token (repo scope) →</a>
-      &nbsp;·&nbsp; <a href="https://gitlab.com/-/user_settings/personal_access_tokens" target="_blank">GitLab token (api scope) →</a>
-    </div>
-  </div>
-
-  <!-- Step 2: Input mode -->
-  <div class="card">
-    <div class="card-title">Step 2 — Code to review</div>
+    <div class="card-title">Step 1 — Code to review</div>
     <div class="tabs">
       <div class="tab active" data-tab="gitlab">GitLab MR URL</div>
       <div class="tab" data-tab="github">GitHub PR URL</div>
@@ -89,7 +58,7 @@
       </div>
     </div>
 
-    <!-- Shared status + preview (used by both GitLab and GitHub tabs) -->
+    <!-- Shared status + preview -->
     <div id="mr-status" class="status-row hidden">
       <div class="dot" id="status-dot"></div>
       <span id="status-txt"></span>
@@ -97,9 +66,9 @@
     <div id="mr-preview" class="hidden"></div>
   </div>
 
-  <!-- Step 3: Focus areas -->
+  <!-- Step 2: Focus areas -->
   <div class="card">
-    <div class="card-title">Step 3 — Focus areas</div>
+    <div class="card-title">Step 2 — Focus areas</div>
     <div class="chips" id="chips">
       <div class="chip on" data-rule="no-unused-vars">no-unused-vars</div>
       <div class="chip on" data-rule="no-explicit-any">no-explicit-any</div>
@@ -118,6 +87,10 @@
   "@typescript-eslint/no-explicit-any": "error",
   "@typescript-eslint/no-non-null-assertion": "warn"
 }'></textarea>
+    </div>
+    <div class="field">
+      <label for="llm-select">AI model</label>
+      <select id="llm-select"><option value="">Loading models...</option></select>
     </div>
     <button class="btn btn-primary btn-full" id="review-btn" onclick="runReview()">Analyze &amp; Review ↗</button>
   </div>

@@ -4,7 +4,7 @@ let ghPRData = null;
 let diffText = '';
 let reviewResult = null;
 let activeTab = 'gitlab';
-let reviewSource = null; // 'gitlab' | 'github' | 'paste'
+let reviewSource = null;
 
 // Tabs
 document.querySelectorAll('.tab').forEach(t => {
@@ -21,12 +21,28 @@ document.querySelectorAll('.tab').forEach(t => {
 // Chips
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
 
+// Load LLM providers from server
+(async function loadProviders() {
+  try {
+    const providers = await (await fetch('/api/providers')).json();
+    const sel = $('llm-select');
+    sel.innerHTML = '';
+    providers.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.available ? p.label : `${p.label} — not configured`;
+      opt.disabled = !p.available;
+      sel.appendChild(opt);
+    });
+    const first = providers.find(p => p.available);
+    if (first) sel.value = first.id;
+  } catch(e) {
+    console.error('Failed to load providers:', e);
+  }
+})();
+
 // Helpers
 const $ = id => document.getElementById(id);
-const getHost = () => ($('gl-host').value || 'https://gitlab.com').replace(/\/$/, '');
-const getToken = () => $('gl-token').value.trim();
-const getGitHubToken = () => $('gh-token').value.trim();
-const getAnthropicKey = () => $('anthropic-key').value.trim();
 const getActiveRules = () => [...document.querySelectorAll('.chip.on')].map(c => c.dataset.rule);
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
@@ -43,54 +59,45 @@ function resetMR() {
   $('output').innerHTML = '';
 }
 
-// ── GitLab ────────────────────────────────────────────────────────────────
-
-function parseMRUrl(url) {
-  const m = url.match(/\/(.+?)\/-\/merge_requests\/(\d+)/);
-  if (!m) return null;
-  return { project: encodeURIComponent(m[1]), iid: m[2] };
-}
-
-async function glFetch(path) {
-  const token = getToken();
-  const res = await fetch(`${getHost()}/api/v4${path}`, {
-    headers: token ? { 'PRIVATE-TOKEN': token } : {}
+async function apiPost(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`GitLab API ${res.status}: ${await res.text()}`);
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+  return data;
 }
+
+// ── GitLab ────────────────────────────────────────────────────────────────
 
 async function fetchMR() {
   const url = $('mr-url').value.trim();
   if (!url) return;
-  const parsed = parseMRUrl(url);
-  if (!parsed) { setStatus('err', 'Invalid GitLab MR URL. Expected: gitlab.com/group/project/-/merge_requests/42'); return; }
 
   $('fetch-btn').disabled = true;
   setStatus('spin', 'Fetching MR from GitLab...');
   $('mr-preview').classList.add('hidden');
 
   try {
-    const [mr, changes] = await Promise.all([
-      glFetch(`/projects/${parsed.project}/merge_requests/${parsed.iid}`),
-      glFetch(`/projects/${parsed.project}/merge_requests/${parsed.iid}/changes`)
-    ]);
-    mrData = { ...mr, project: parsed.project, iid: parsed.iid };
-    diffText = (changes.changes || []).map(f => `--- ${f.old_path}\n+++ ${f.new_path}\n${f.diff}`).join('\n\n');
+    const data = await apiPost('/api/fetch-gitlab-mr', { url });
+    mrData = data;
+    diffText = data.diff;
 
-    const sc = mr.state === 'opened' ? 'pill-open' : mr.state === 'merged' ? 'pill-merged' : 'pill-closed';
+    const sc = data.state === 'opened' ? 'pill-open' : data.state === 'merged' ? 'pill-merged' : 'pill-closed';
     $('mr-preview').innerHTML = `
       <div class="mr-preview">
-        <div class="mr-preview-title">${esc(mr.title)}</div>
+        <div class="mr-preview-title">${esc(data.title)}</div>
         <div class="mr-preview-meta">
-          <span class="pill ${sc}">${mr.state}</span>
-          <span>by ${esc(mr.author?.name || 'unknown')}</span>
-          <span>${esc(mr.source_branch)} → ${esc(mr.target_branch)}</span>
-          <span>${(changes.changes || []).length} files changed</span>
+          <span class="pill ${sc}">${data.state}</span>
+          <span>by ${esc(data.author)}</span>
+          <span>${esc(data.sourceBranch)} → ${esc(data.targetBranch)}</span>
+          <span>${data.fileCount} files changed</span>
         </div>
       </div>`;
     $('mr-preview').classList.remove('hidden');
-    setStatus('ok', `Fetched — ${(changes.changes || []).length} files loaded`);
+    setStatus('ok', `Fetched — ${data.fileCount} files loaded`);
   } catch(e) {
     setStatus('err', e.message);
   } finally {
@@ -100,56 +107,33 @@ async function fetchMR() {
 
 // ── GitHub ────────────────────────────────────────────────────────────────
 
-function parseGitHubPRUrl(url) {
-  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-  if (!m) return null;
-  return { owner: m[1], repo: m[2], number: m[3] };
-}
-
-async function ghFetch(path) {
-  const token = getGitHubToken();
-  const res = await fetch(`https://api.github.com${path}`, {
-    headers: {
-      'Accept': 'application/vnd.github+json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    }
-  });
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
-  return res.json();
-}
-
 async function fetchGitHubPR() {
   const url = $('gh-pr-url').value.trim();
   if (!url) return;
-  const parsed = parseGitHubPRUrl(url);
-  if (!parsed) { setStatus('err', 'Invalid GitHub PR URL. Expected: github.com/owner/repo/pull/42'); return; }
 
   $('gh-fetch-btn').disabled = true;
   setStatus('spin', 'Fetching PR from GitHub...');
   $('mr-preview').classList.add('hidden');
 
   try {
-    const [pr, files] = await Promise.all([
-      ghFetch(`/repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}`),
-      ghFetch(`/repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}/files`)
-    ]);
-    ghPRData = { ...pr, owner: parsed.owner, repo: parsed.repo, number: parsed.number };
-    diffText = files.map(f => `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || ''}`).join('\n\n');
+    const data = await apiPost('/api/fetch-github-pr', { url });
+    ghPRData = data;
+    diffText = data.diff;
 
-    const sc = pr.merged ? 'pill-merged' : pr.state === 'open' ? 'pill-open' : 'pill-closed';
-    const stateLabel = pr.merged ? 'merged' : pr.state;
+    const sc = data.merged ? 'pill-merged' : data.state === 'open' ? 'pill-open' : 'pill-closed';
+    const stateLabel = data.merged ? 'merged' : data.state;
     $('mr-preview').innerHTML = `
       <div class="mr-preview">
-        <div class="mr-preview-title">${esc(pr.title)}</div>
+        <div class="mr-preview-title">${esc(data.title)}</div>
         <div class="mr-preview-meta">
           <span class="pill ${sc}">${stateLabel}</span>
-          <span>by ${esc(pr.user?.login || 'unknown')}</span>
-          <span>${esc(pr.head?.ref)} → ${esc(pr.base?.ref)}</span>
-          <span>${files.length} files changed</span>
+          <span>by ${esc(data.author)}</span>
+          <span>${esc(data.headRef)} → ${esc(data.baseRef)}</span>
+          <span>${data.fileCount} files changed</span>
         </div>
       </div>`;
     $('mr-preview').classList.remove('hidden');
-    setStatus('ok', `Fetched — ${files.length} files loaded`);
+    setStatus('ok', `Fetched — ${data.fileCount} files loaded`);
   } catch(e) {
     setStatus('err', e.message);
   } finally {
@@ -160,9 +144,6 @@ async function fetchGitHubPR() {
 // ── Run Review ────────────────────────────────────────────────────────────
 
 async function runReview() {
-  const apiKey = getAnthropicKey();
-  if (!apiKey) { $('output').innerHTML = '<div class="err-box">Please enter your Anthropic API key in Step 1.</div>'; return; }
-
   let diff = '';
   let mrTitle = '';
   let mrAuthor = '';
@@ -174,14 +155,14 @@ async function runReview() {
     if (!diffText) { $('output').innerHTML = '<div class="err-box">Please fetch an MR first.</div>'; return; }
     diff = diffText;
     mrTitle = mrData?.title || '';
-    mrAuthor = mrData?.author?.name || '';
-    mrBranch = `${mrData?.source_branch || ''} → ${mrData?.target_branch || ''}`;
+    mrAuthor = mrData?.author || '';
+    mrBranch = `${mrData?.sourceBranch || ''} → ${mrData?.targetBranch || ''}`;
   } else if (activeTab === 'github') {
     if (!diffText) { $('output').innerHTML = '<div class="err-box">Please fetch a PR first.</div>'; return; }
     diff = diffText;
     mrTitle = ghPRData?.title || '';
-    mrAuthor = ghPRData?.user?.login || '';
-    mrBranch = `${ghPRData?.head?.ref || ''} → ${ghPRData?.base?.ref || ''}`;
+    mrAuthor = ghPRData?.author || '';
+    mrBranch = `${ghPRData?.headRef || ''} → ${ghPRData?.baseRef || ''}`;
   } else {
     diff = $('diff-input').value.trim();
     mrTitle = $('manual-title').value.trim();
@@ -190,71 +171,18 @@ async function runReview() {
 
   const rules = getActiveRules();
   const customEslint = $('eslint-config').value.trim();
-  const eslintBlock = customEslint || `{
-  "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-  "@typescript-eslint/no-explicit-any": "error",
-  "@typescript-eslint/no-non-null-assertion": "warn"
-}`;
+  const provider = $('llm-select').value;
+  const truncated = diff.length > 14000 ? diff.slice(0, 14000) + '\n\n[diff truncated]' : diff;
 
   $('review-btn').disabled = true;
   $('output').innerHTML = '<div class="loading"><div class="loading-txt">Analyzing code changes...</div></div>';
 
-  const truncated = diff.length > 14000 ? diff.slice(0, 14000) + '\n\n[diff truncated]' : diff;
-
-  const system = `You are a senior code reviewer for a Node.js/TypeScript/MongoDB backend team.
-
-ESLint config:
-${eslintBlock}
-
-Return ONLY valid JSON, no markdown fences, no preamble:
-{
-  "summary": "2-3 sentence overall assessment",
-  "score": <number 0-100>,
-  "errors": <count>,
-  "warnings": <count>,
-  "suggestions": <count>,
-  "markdownComment": "Formatted markdown suitable to post as a MR/PR comment. Include a score badge, summary, and findings with code blocks.",
-  "findings": [
-    {
-      "severity": "error|warning|info|suggestion",
-      "rule": "rule or category name",
-      "message": "clear issue description",
-      "fix": "specific actionable fix",
-      "codeSnippet": "problematic code or empty string"
-    }
-  ]
-}
-
-Focus areas: ${rules.join(', ')}.
-Check: ESLint violations per config above, MongoDB anti-patterns (missing .lean() on reads, missing await, no error handling on DB ops, missing projections, unindexed queries), async/await bugs, unhandled promises, missing try/catch, TypeScript type safety, security issues (hardcoded secrets, NoSQL injection, unvalidated inputs), logic bugs, code style violations.`;
-
-  const userMsg = [
-    mrTitle && `MR/PR: ${mrTitle}`,
-    mrAuthor && `Author: ${mrAuthor}`,
-    mrBranch && `Branch: ${mrBranch}`,
-    `\nDiff:\n${truncated}`
-  ].filter(Boolean).join('\n');
-
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-calls': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        system,
-        messages: [{ role: 'user', content: userMsg }]
-      })
+    reviewResult = await apiPost('/api/review', {
+      diff: truncated, mrTitle, mrAuthor, mrBranch, rules,
+      customEslint: customEslint || null,
+      provider
     });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
-    const raw = data.content?.find(b => b.type === 'text')?.text || '';
-    reviewResult = JSON.parse(raw.replace(/```json|```/g, '').trim());
     renderResults(reviewResult);
   } catch(e) {
     $('output').innerHTML = `<div class="err-box">Analysis failed: ${esc(e.message)}</div>`;
@@ -269,8 +197,8 @@ function renderResults(r) {
   const score = Math.round(r.score || 0);
   const sc = score >= 80 ? 's' : score >= 60 ? 'w' : 'd';
 
-  const canPostGitLab = reviewSource === 'gitlab' && !!getToken() && !!mrData;
-  const canPostGitHub = reviewSource === 'github' && !!getGitHubToken() && !!ghPRData;
+  const canPostGitLab = reviewSource === 'gitlab' && !!mrData;
+  const canPostGitHub = reviewSource === 'github' && !!ghPRData;
   const canPost = canPostGitLab || canPostGitHub;
 
   const postLabel = canPostGitLab ? 'Post comment on MR ↗'
@@ -331,28 +259,16 @@ async function postComment() {
   const body = reviewResult.markdownComment || buildMarkdown(reviewResult);
 
   try {
-    if (mrData && getToken()) {
-      const res = await fetch(`${getHost()}/api/v4/projects/${mrData.project}/merge_requests/${mrData.iid}/notes`, {
-        method: 'POST',
-        headers: { 'PRIVATE-TOKEN': getToken(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body })
+    if (mrData) {
+      const data = await apiPost('/api/post-gitlab-comment', {
+        project: mrData.project, iid: mrData.iid, body, webUrl: mrData.webUrl
       });
-      if (!res.ok) throw new Error('GitLab returned ' + res.status);
-      const note = await res.json();
-      status.innerHTML = `Posted! <a href="${mrData.web_url}#note_${note.id}" target="_blank">View comment →</a>`;
-    } else if (ghPRData && getGitHubToken()) {
-      const res = await fetch(`https://api.github.com/repos/${ghPRData.owner}/${ghPRData.repo}/issues/${ghPRData.number}/comments`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${getGitHubToken()}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github+json'
-        },
-        body: JSON.stringify({ body })
+      status.innerHTML = `Posted! <a href="${mrData.webUrl}#note_${data.noteId}" target="_blank">View comment →</a>`;
+    } else if (ghPRData) {
+      const data = await apiPost('/api/post-github-comment', {
+        owner: ghPRData.owner, repo: ghPRData.repo, number: ghPRData.number, body
       });
-      if (!res.ok) throw new Error('GitHub returned ' + res.status);
-      const comment = await res.json();
-      status.innerHTML = `Posted! <a href="${comment.html_url}" target="_blank">View comment →</a>`;
+      status.innerHTML = `Posted! <a href="${data.htmlUrl}" target="_blank">View comment →</a>`;
     }
     btn.textContent = 'Posted ✓';
   } catch(e) {
