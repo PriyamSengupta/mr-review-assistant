@@ -2,11 +2,12 @@ const express = require('express');
 const path = require('path');
 require('dotenv').config();
 
+const { getProvider, listProviders } = require('./llm/factory');
+
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const GITLAB_TOKEN  = process.env.GITLAB_TOKEN;
 const GITLAB_HOST   = (process.env.GITLAB_HOST || 'https://gitlab.com').replace(/\/$/, '');
 const GITHUB_TOKEN  = process.env.GITHUB_TOKEN;
@@ -102,14 +103,22 @@ app.post('/api/fetch-github-pr', async (req, res) => {
   }
 });
 
-// ── Anthropic: run review ─────────────────────────────────────────────────
-app.post('/api/review', async (req, res) => {
-  if (!ANTHROPIC_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set in .env' });
-  }
+// ── List LLM providers ────────────────────────────────────────────────────
+app.get('/api/providers', (req, res) => {
+  res.json(listProviders());
+});
 
-  const { diff, mrTitle, mrAuthor, mrBranch, rules, customEslint } = req.body;
+// ── Run review (provider-agnostic) ────────────────────────────────────────
+app.post('/api/review', async (req, res) => {
+  const { diff, mrTitle, mrAuthor, mrBranch, rules, customEslint, provider: providerName = 'anthropic' } = req.body;
   if (!diff) return res.status(400).json({ error: 'diff is required' });
+
+  let provider;
+  try {
+    provider = getProvider(providerName);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
 
   const eslintBlock = customEslint || `{
   "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
@@ -119,7 +128,7 @@ app.post('/api/review', async (req, res) => {
 
   const truncated = diff.length > 14000 ? diff.slice(0, 14000) + '\n\n[diff truncated]' : diff;
 
-  const system = `You are a senior code reviewer for a Node.js/TypeScript/MongoDB backend team.
+  const systemPrompt = `You are a senior code reviewer for a Node.js/TypeScript/MongoDB backend team.
 
 ESLint config:
 ${eslintBlock}
@@ -154,25 +163,8 @@ Check: ESLint violations per config above, MongoDB anti-patterns (missing .lean(
   ].filter(Boolean).join('\n');
 
   try {
-    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        system,
-        messages: [{ role: 'user', content: userMsg }]
-      })
-    });
-
-    const data = await apiRes.json();
-    if (data.error) throw new Error(data.error.message);
-    const raw = data.content?.find(b => b.type === 'text')?.text || '';
-    res.json(JSON.parse(raw.replace(/```json|```/g, '').trim()));
+    const result = await provider.review({ systemPrompt, userMsg });
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -237,7 +229,9 @@ app.post('/api/post-github-comment', async (req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`MR Review Assistant → http://localhost:${PORT}`);
-  if (!ANTHROPIC_KEY) console.warn('  ⚠  ANTHROPIC_API_KEY not set in .env');
-  if (!GITLAB_TOKEN)  console.warn('  ⚠  GITLAB_TOKEN not set in .env (GitLab reviews disabled)');
-  if (!GITHUB_TOKEN)  console.warn('  ⚠  GITHUB_TOKEN not set in .env (GitHub reviews disabled)');
+  listProviders().forEach(p => {
+    if (!p.available) console.warn(`  ⚠  ${p.id} provider not configured (${p.label})`);
+  });
+  if (!GITLAB_TOKEN) console.warn('  ⚠  GITLAB_TOKEN not set in .env (GitLab post-comment disabled)');
+  if (!GITHUB_TOKEN) console.warn('  ⚠  GITHUB_TOKEN not set in .env (GitHub post-comment disabled)');
 });

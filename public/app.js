@@ -21,6 +21,26 @@ document.querySelectorAll('.tab').forEach(t => {
 // Chips
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
 
+// Load LLM providers from server
+(async function loadProviders() {
+  try {
+    const providers = await (await fetch('/api/providers')).json();
+    const sel = $('llm-select');
+    sel.innerHTML = '';
+    providers.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.available ? p.label : `${p.label} — not configured`;
+      opt.disabled = !p.available;
+      sel.appendChild(opt);
+    });
+    const first = providers.find(p => p.available);
+    if (first) sel.value = first.id;
+  } catch(e) {
+    console.error('Failed to load providers:', e);
+  }
+})();
+
 // Helpers
 const $ = id => document.getElementById(id);
 const getActiveRules = () => [...document.querySelectorAll('.chip.on')].map(c => c.dataset.rule);
@@ -151,6 +171,7 @@ async function runReview() {
 
   const rules = getActiveRules();
   const customEslint = $('eslint-config').value.trim();
+  const provider = $('llm-select').value;
   const truncated = diff.length > 14000 ? diff.slice(0, 14000) + '\n\n[diff truncated]' : diff;
 
   $('review-btn').disabled = true;
@@ -159,7 +180,8 @@ async function runReview() {
   try {
     reviewResult = await apiPost('/api/review', {
       diff: truncated, mrTitle, mrAuthor, mrBranch, rules,
-      customEslint: customEslint || null
+      customEslint: customEslint || null,
+      provider
     });
     renderResults(reviewResult);
   } catch(e) {

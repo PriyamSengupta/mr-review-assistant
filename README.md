@@ -2,9 +2,9 @@
 
 > AI-powered merge request / pull request code reviewer for GitLab & GitHub — built for Node.js / TypeScript / MongoDB teams.
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Powered by](https://img.shields.io/badge/powered%20by-Claude%20AI-orange)
+![Models](https://img.shields.io/badge/models-Claude%20%7C%20GPT--4o%20%7C%20Gemini-orange)
 
 ---
 
@@ -19,7 +19,7 @@ Paste a GitLab MR or GitHub PR URL → get an instant AI-powered code review tha
 - **Code style violations** — naming conventions, unnecessary complexity, missing return types
 - **Logic bugs** — edge cases, incorrect conditions, missing null checks
 
-After reviewing, it can **auto-post the review as a comment** directly on your GitLab MR or GitHub PR.
+Choose your preferred AI model (Claude, GPT-4o, or Gemini) and after reviewing, **auto-post the result as a comment** directly on your GitLab MR or GitHub PR.
 
 ---
 
@@ -45,9 +45,9 @@ cd mr-review-assistant
 # 2. Install dependencies
 npm install
 
-# 3. Configure your API keys
+# 3. Configure your keys
 cp .env.example .env
-# Edit .env and fill in your keys (see below)
+# Edit .env — add at least one LLM key and the tokens for your platform(s)
 
 # 4. Start the server
 npm start
@@ -64,32 +64,39 @@ Open **http://localhost:3000** in your browser.
 
 ## Configuration (.env)
 
-Copy `.env.example` to `.env` and fill in your keys. The file is gitignored and never committed.
+Copy `.env.example` to `.env` and fill in your values. This file is gitignored and never committed.
 
-```env
-# Required for AI review
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+### LLM providers — configure at least one
 
-# Required for GitHub PR reviews (repo scope)
-GITHUB_TOKEN=ghp_your-token-here
+| Key | Model | Where to get it |
+|-----|-------|----------------|
+| `ANTHROPIC_API_KEY` | Claude Sonnet 4 | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| `OPENAI_API_KEY` | GPT-4o | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `GEMINI_API_KEY` | Gemini 2.0 Flash | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
 
-# Required for GitLab MR reviews (api scope)
-GITLAB_TOKEN=glpat-your-token-here
+### Source control tokens
 
-# Optional — change for self-hosted GitLab
-GITLAB_HOST=https://gitlab.com
+| Key | Scope | Where to get it |
+|-----|-------|----------------|
+| `GITHUB_TOKEN` | `repo` | [github.com/settings/tokens](https://github.com/settings/tokens) |
+| `GITLAB_TOKEN` | `api` | [gitlab.com/-/user_settings/personal_access_tokens](https://gitlab.com/-/user_settings/personal_access_tokens) |
+| `GITLAB_HOST` | — | Your GitLab instance URL (default: `https://gitlab.com`) |
 
-# Optional — default is 3000
-PORT=3000
-```
+> All keys live only in `.env` on your machine. They are never sent to the browser.
 
-| Key | Where to get it | Scope needed |
-|-----|----------------|-------------|
-| `ANTHROPIC_API_KEY` | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) | — |
-| `GITHUB_TOKEN` | [github.com/settings/tokens](https://github.com/settings/tokens) | `repo` |
-| `GITLAB_TOKEN` | [gitlab.com/-/user_settings/personal_access_tokens](https://gitlab.com/-/user_settings/personal_access_tokens) | `api` |
+---
 
-> Keys live only in your `.env` on your machine. They are never exposed to the browser or committed to git.
+## Supported AI models
+
+The UI shows only the models you have configured. Unconfigured providers are greyed out.
+
+| Provider | Model | Notes |
+|----------|-------|-------|
+| **Anthropic** | `claude-sonnet-4-20250514` | Default |
+| **OpenAI** | `gpt-4o` | Uses `response_format: json_object` |
+| **Google** | `gemini-2.0-flash` | Uses `responseMimeType: application/json` |
+
+To change a model version, edit the relevant file in `llm/`.
 
 ---
 
@@ -111,9 +118,11 @@ Click **Fetch PR** — same experience, using the GitHub REST API.
 
 Alternatively, switch to **Paste diff / code** tab and paste a raw git diff or file contents directly.
 
-### Step 2 — Toggle focus areas & Review
+### Step 2 — Focus areas, model & review
 
-Toggle which categories you want to focus on, then click **Analyze & Review**.
+- Toggle which categories to focus on
+- Select your AI model from the dropdown (only configured models are enabled)
+- Click **Analyze & Review**
 
 Once results appear, click **Post comment on MR / PR** to push the review directly to GitLab or GitHub as a formatted markdown comment.
 
@@ -169,15 +178,43 @@ GITLAB_HOST=https://gitlab.yourcompany.com
 
 ---
 
+## Adding a new LLM provider
+
+1. Create `llm/myprovider.js` implementing `name`, `label`, `isAvailable()`, and `review({ systemPrompt, userMsg })`
+2. Register it in `llm/factory.js`
+
+That's it — the server, UI dropdown, and availability checks all pick it up automatically.
+
+```js
+// llm/myprovider.js
+class MyProvider {
+  get name()  { return 'myprovider'; }
+  get label() { return 'My Model (Provider)'; }
+  isAvailable() { return !!process.env.MY_API_KEY; }
+
+  async review({ systemPrompt, userMsg }) {
+    // call your API, return parsed JSON matching the review schema
+  }
+}
+module.exports = MyProvider;
+```
+
+---
+
 ## Project structure
 
 ```
 mr-review-assistant/
-├── server.js         # Express server — proxies all API calls
+├── server.js              # Express server — API routes
 ├── package.json
-├── .env              # Your API keys (gitignored, never committed)
-├── .env.example      # Template — commit this
-└── public/           # Static frontend served by Express
+├── .env                   # Your keys (gitignored)
+├── .env.example           # Template
+├── llm/
+│   ├── factory.js         # getProvider(name) / listProviders()
+│   ├── anthropic.js       # Claude Sonnet 4
+│   ├── openai.js          # GPT-4o
+│   └── gemini.js          # Gemini 2.0 Flash
+└── public/                # Static frontend
     ├── index.html
     ├── styles.css
     └── app.js
@@ -187,9 +224,9 @@ mr-review-assistant/
 
 ## Tech stack
 
-- **Node.js + Express** — backend server, keeps all API keys server-side
+- **Node.js + Express** — backend server, all API keys stay server-side
 - **Vanilla HTML/CSS/JS** — zero frontend dependencies, no build step
-- **Claude API** (`claude-sonnet-4-20250514`) — AI-powered code analysis
+- **LLM factory pattern** — pluggable provider architecture (Anthropic, OpenAI, Gemini)
 - **GitLab REST API v4** — fetch MR diffs and post review comments
 - **GitHub REST API** — fetch PR diffs and post review comments
 
@@ -199,6 +236,7 @@ mr-review-assistant/
 
 - [x] GitHub support (PRs)
 - [x] Node.js server (API keys never exposed to browser)
+- [x] Multi-LLM support — Claude, GPT-4o, Gemini via factory pattern
 - [ ] YouTrack integration — auto-update linked task status after review
 - [ ] Inline diff comments (line-level review notes)
 - [ ] Custom rule presets — save and reuse your ESLint config
