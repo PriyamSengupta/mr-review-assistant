@@ -18,17 +18,24 @@ app.post('/api/fetch-gitlab-mr', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'url is required' });
 
-  const m = url.match(/\/(.+?)\/-\/merge_requests\/(\d+)/);
+  let pathname;
+  try { pathname = new URL(url).pathname; } catch { return res.status(400).json({ error: 'Invalid URL' }); }
+  const m = pathname.match(/^\/(.+?)\/-\/merge_requests\/(\d+)$/);
   if (!m) return res.status(400).json({ error: 'Invalid GitLab MR URL. Expected: .../group/project/-/merge_requests/42' });
 
-  const project = encodeURIComponent(m[1]);
+  const projectPath = encodeURIComponent(m[1]);
   const iid = m[2];
   const headers = GITLAB_TOKEN ? { 'PRIVATE-TOKEN': GITLAB_TOKEN } : {};
 
   try {
+    const projectRes = await fetch(`${GITLAB_HOST}/api/v4/projects/${projectPath}`, { headers });
+    if (!projectRes.ok) throw new Error(`GitLab API ${projectRes.status}: ${await projectRes.text()}`);
+    const projectData = await projectRes.json();
+    const projectId = projectData.id;
+
     const [mrRes, changesRes] = await Promise.all([
-      fetch(`${GITLAB_HOST}/api/v4/projects/${project}/merge_requests/${iid}`, { headers }),
-      fetch(`${GITLAB_HOST}/api/v4/projects/${project}/merge_requests/${iid}/changes`, { headers })
+      fetch(`${GITLAB_HOST}/api/v4/projects/${projectId}/merge_requests/${iid}`, { headers }),
+      fetch(`${GITLAB_HOST}/api/v4/projects/${projectId}/merge_requests/${iid}/changes`, { headers })
     ]);
     if (!mrRes.ok) throw new Error(`GitLab API ${mrRes.status}: ${await mrRes.text()}`);
     if (!changesRes.ok) throw new Error(`GitLab API ${changesRes.status}: ${await changesRes.text()}`);
@@ -46,7 +53,7 @@ app.post('/api/fetch-gitlab-mr', async (req, res) => {
       targetBranch: mr.target_branch,
       state: mr.state,
       webUrl: mr.web_url,
-      project,
+      project: projectPath,
       iid,
       fileCount: (changes.changes || []).length,
       diff
