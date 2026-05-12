@@ -5,6 +5,62 @@ let diffText = '';
 let reviewResult = null;
 let activeTab = 'gitlab';
 let reviewSource = null;
+let activeStack = 'backend';
+
+const STACK_CHIPS = {
+  backend: [
+    { rule: 'no-unused-vars',       label: 'no-unused-vars',       on: true },
+    { rule: 'no-explicit-any',      label: 'no-explicit-any',      on: true },
+    { rule: 'no-non-null-assertion',label: 'no-non-null-assertion', on: true },
+    { rule: 'mongodb-patterns',     label: 'mongodb patterns',     on: true },
+    { rule: 'error-handling',       label: 'error handling',       on: true },
+    { rule: 'async-await',          label: 'async / await',        on: true },
+    { rule: 'security',             label: 'security',             on: true },
+    { rule: 'logic',                label: 'logic issues',         on: true },
+    { rule: 'code-style',           label: 'code style',           on: true },
+  ],
+  frontend: [
+    { rule: 'no-unused-vars',  label: 'no-unused-vars',  on: true },
+    { rule: 'no-explicit-any', label: 'no-explicit-any', on: true },
+    { rule: 'react-hooks',     label: 'react hooks',     on: true },
+    { rule: 'accessibility',   label: 'accessibility',   on: true },
+    { rule: 'performance',     label: 'performance',     on: true },
+    { rule: 'security',        label: 'security',        on: true },
+    { rule: 'logic',           label: 'logic issues',    on: true },
+    { rule: 'code-style',      label: 'code style',      on: true },
+    { rule: 'bundle-size',     label: 'bundle size',     on: true },
+  ],
+  fullstack: [
+    { rule: 'no-unused-vars',       label: 'no-unused-vars',       on: true },
+    { rule: 'no-explicit-any',      label: 'no-explicit-any',      on: true },
+    { rule: 'no-non-null-assertion',label: 'no-non-null-assertion', on: true },
+    { rule: 'mongodb-patterns',     label: 'mongodb patterns',     on: true },
+    { rule: 'react-hooks',          label: 'react hooks',          on: true },
+    { rule: 'accessibility',        label: 'accessibility',        on: true },
+    { rule: 'error-handling',       label: 'error handling',       on: true },
+    { rule: 'async-await',          label: 'async / await',        on: true },
+    { rule: 'security',             label: 'security',             on: true },
+    { rule: 'performance',          label: 'performance',          on: true },
+    { rule: 'logic',                label: 'logic issues',         on: true },
+    { rule: 'code-style',           label: 'code style',           on: true },
+    { rule: 'bundle-size',          label: 'bundle size',          on: true },
+  ],
+};
+
+function setStack(stack) {
+  activeStack = stack;
+  document.querySelectorAll('.seg').forEach(s => s.classList.toggle('active', s.dataset.stack === stack));
+  renderChips(stack);
+}
+
+function renderChips(stack) {
+  const chips = STACK_CHIPS[stack] || STACK_CHIPS.backend;
+  const container = $('chips');
+  container.innerHTML = chips.map(c =>
+    `<div class="chip ${c.on ? 'on' : ''}" data-rule="${c.rule}">${c.label}</div>`
+  ).join('');
+  container.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
+}
 
 // Tabs
 document.querySelectorAll('.tab').forEach(t => {
@@ -18,8 +74,7 @@ document.querySelectorAll('.tab').forEach(t => {
   });
 });
 
-// Chips
-document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
+// Chips — rendered dynamically by renderChips(); init on load below
 
 // Load LLM providers from server
 (async function loadProviders() {
@@ -44,6 +99,9 @@ document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () =
 // Helpers
 const $ = id => document.getElementById(id);
 const getActiveRules = () => [...document.querySelectorAll('.chip.on')].map(c => c.dataset.rule);
+
+// Init chips for default stack
+renderChips(activeStack);
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 function setStatus(type, msg) {
@@ -181,7 +239,8 @@ async function runReview() {
     reviewResult = await apiPost('/api/review', {
       diff: truncated, mrTitle, mrAuthor, mrBranch, rules,
       customEslint: customEslint || null,
-      provider
+      provider,
+      stack: activeStack
     });
     renderResults(reviewResult);
   } catch(e) {

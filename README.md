@@ -1,6 +1,6 @@
 # MR Review Assistant
 
-> AI-powered merge request / pull request code reviewer for GitLab & GitHub — built for Node.js / TypeScript / MongoDB teams.
+> AI-powered merge request / pull request code reviewer for GitLab & GitHub — supports Backend, Frontend, and Fullstack projects.
 
 ![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -10,22 +10,41 @@
 
 ## What it does
 
-Paste a GitLab MR or GitHub PR URL → get an instant AI-powered code review that checks for:
+Paste a GitLab MR or GitHub PR URL → get an instant AI-powered code review tailored to your stack. Select **Backend**, **Frontend**, or **Fullstack** and the reviewer's focus areas switch automatically.
 
-- **ESLint violations** — based on your TypeScript ESLint config (`no-explicit-any`, `no-unused-vars`, `no-non-null-assertion`, etc.)
-- **MongoDB anti-patterns** — missing `.lean()`, missing `await` on queries, no error handling on DB ops, missing field projections
+### Backend
+- **ESLint violations** — `no-explicit-any`, `no-unused-vars`, `no-non-null-assertion`, etc.
+- **MongoDB anti-patterns** — missing `.lean()`, missing `await` on queries, no error handling, missing projections
 - **Async/await bugs** — unhandled promises, missing `try/catch`, fire-and-forget DB calls
-- **Security issues** — hardcoded secrets, NoSQL injection risks, unvalidated inputs
-- **Code style violations** — naming conventions, unnecessary complexity, missing return types
-- **Logic bugs** — edge cases, incorrect conditions, missing null checks
+- **Security** — hardcoded secrets, NoSQL injection, unvalidated inputs
+
+### Frontend
+- **React hooks rules** — missing `useEffect` deps, stale closures, conditional hook calls
+- **Component patterns** — missing `key` props, unnecessary re-renders, components defined inside render
+- **Accessibility** — missing `alt` text, `aria-*` attributes, keyboard navigation, non-semantic HTML
+- **Bundle size** — whole-library imports, missing route-level lazy loading
+- **Security** — `dangerouslySetInnerHTML` without sanitization, open redirects
+
+### All stacks
+- TypeScript type safety, logic bugs, code style violations, security issues
 
 Choose your preferred AI model (Claude, GPT-4o, or Gemini) and after reviewing, **auto-post the result as a comment** directly on your GitLab MR or GitHub PR.
 
 ---
 
-## Screenshot
+## Screenshots
 
-![MR Review Assistant Screenshot](public/Screenshot.png)
+### Step 1 — Input & Step 2 — Stack selector (Backend)
+![Overview](public/1.png)
+
+### Step 2 — Frontend stack selected
+![Frontend stack](public/2.png)
+
+### Review results
+![Review results](public/4.png)
+
+### Post comment to GitLab
+![Post to GitLab](public/5.png)
 
 ---
 
@@ -118,9 +137,11 @@ Click **Fetch PR** — same experience, using the GitHub REST API.
 
 Alternatively, switch to **Paste diff / code** tab and paste a raw git diff or file contents directly.
 
-### Step 2 — Focus areas, model & review
+### Step 2 — Stack, focus areas, model & review
 
-- Toggle which categories to focus on
+- **Select your stack** — Backend, Frontend, or Fullstack. The focus-area chips update automatically to match the stack's relevant rules.
+- Toggle individual chips on/off to narrow or expand the review scope
+- Optionally paste a custom ESLint rules object to override the defaults
 - Select your AI model from the dropdown (only configured models are enabled)
 - Click **Analyze & Review**
 
@@ -205,7 +226,7 @@ module.exports = MyProvider;
 
 ```
 mr-review-assistant/
-├── server.js              # Express server — API routes
+├── server.js              # Express server — API routes + system prompt builder
 ├── package.json
 ├── .env                   # Your keys (gitignored)
 ├── .env.example           # Template
@@ -237,6 +258,7 @@ mr-review-assistant/
 - [x] GitHub support (PRs)
 - [x] Node.js server (API keys never exposed to browser)
 - [x] Multi-LLM support — Claude, GPT-4o, Gemini via factory pattern
+- [x] Frontend & Fullstack support — stack selector with tailored review prompts and chip sets
 - [ ] YouTrack integration — auto-update linked task status after review
 - [ ] Inline diff comments (line-level review notes)
 - [ ] Custom rule presets — save and reuse your ESLint config

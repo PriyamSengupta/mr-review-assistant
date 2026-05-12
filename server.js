@@ -115,9 +115,65 @@ app.get('/api/providers', (req, res) => {
   res.json(listProviders());
 });
 
+function buildSystemPrompt(stack, rules, eslintBlock) {
+  const rulesLine = (rules || []).length ? `Focus areas: ${rules.join(', ')}.` : '';
+  const jsonSchema = `Return ONLY valid JSON, no markdown fences, no preamble:
+{
+  "summary": "2-3 sentence overall assessment",
+  "score": <number 0-100>,
+  "errors": <count>,
+  "warnings": <count>,
+  "suggestions": <count>,
+  "markdownComment": "Formatted markdown suitable to post as a MR/PR comment. Include a score badge, summary, and findings with code blocks.",
+  "findings": [
+    {
+      "severity": "error|warning|info|suggestion",
+      "rule": "rule or category name",
+      "message": "clear issue description",
+      "fix": "specific actionable fix",
+      "codeSnippet": "problematic code or empty string"
+    }
+  ]
+}`;
+
+  if (stack === 'frontend') {
+    return `You are a senior code reviewer for a React/TypeScript frontend team.
+
+ESLint config:
+${eslintBlock}
+
+${jsonSchema}
+
+${rulesLine}
+Check: ESLint violations per config above, React hooks rules (missing dependencies in useEffect/useCallback/useMemo, stale closures, hooks called conditionally or inside loops), component patterns (missing key props in lists, prop drilling, unnecessary re-renders, component defined inside render), accessibility issues (missing alt text, missing aria-* attributes, poor keyboard navigation, non-semantic HTML), TypeScript type safety (any types, missing return types, unsafe assertions), CSS/styling issues, bundle size concerns (importing entire libraries instead of specific modules, missing lazy loading for routes), security issues (dangerouslySetInnerHTML without sanitization, open redirects, unvalidated URLs), performance (expensive computations without memoization, missing virtualization for long lists, unnecessary effects), logic bugs, code style violations.`;
+  }
+
+  if (stack === 'fullstack') {
+    return `You are a senior code reviewer for a fullstack Node.js/TypeScript/React team.
+
+ESLint config:
+${eslintBlock}
+
+${jsonSchema}
+
+${rulesLine}
+Check: ESLint violations per config above, MongoDB anti-patterns (missing .lean() on reads, missing await, no error handling on DB ops, missing projections, unindexed queries), async/await bugs, unhandled promises, missing try/catch, React hooks rules (missing deps, stale closures, conditional hooks), component patterns (missing keys, unnecessary re-renders), accessibility issues (missing aria-*, alt text, keyboard nav), TypeScript type safety, security issues (hardcoded secrets, NoSQL injection, XSS via dangerouslySetInnerHTML, unvalidated inputs), bundle size concerns (large imports, missing lazy loading), performance issues, logic bugs, code style violations.`;
+  }
+
+  return `You are a senior code reviewer for a Node.js/TypeScript/MongoDB backend team.
+
+ESLint config:
+${eslintBlock}
+
+${jsonSchema}
+
+${rulesLine}
+Check: ESLint violations per config above, MongoDB anti-patterns (missing .lean() on reads, missing await, no error handling on DB ops, missing projections, unindexed queries), async/await bugs, unhandled promises, missing try/catch, TypeScript type safety, security issues (hardcoded secrets, NoSQL injection, unvalidated inputs), logic bugs, code style violations.`;
+}
+
 // ── Run review (provider-agnostic) ────────────────────────────────────────
 app.post('/api/review', async (req, res) => {
-  const { diff, mrTitle, mrAuthor, mrBranch, rules, customEslint, provider: providerName = 'anthropic' } = req.body;
+  const { diff, mrTitle, mrAuthor, mrBranch, rules, customEslint, provider: providerName = 'anthropic', stack = 'backend' } = req.body;
   if (!diff) return res.status(400).json({ error: 'diff is required' });
 
   let provider;
@@ -135,32 +191,7 @@ app.post('/api/review', async (req, res) => {
 
   const truncated = diff.length > 14000 ? diff.slice(0, 14000) + '\n\n[diff truncated]' : diff;
 
-  const systemPrompt = `You are a senior code reviewer for a Node.js/TypeScript/MongoDB backend team.
-
-ESLint config:
-${eslintBlock}
-
-Return ONLY valid JSON, no markdown fences, no preamble:
-{
-  "summary": "2-3 sentence overall assessment",
-  "score": <number 0-100>,
-  "errors": <count>,
-  "warnings": <count>,
-  "suggestions": <count>,
-  "markdownComment": "Formatted markdown suitable to post as a MR/PR comment. Include a score badge, summary, and findings with code blocks.",
-  "findings": [
-    {
-      "severity": "error|warning|info|suggestion",
-      "rule": "rule or category name",
-      "message": "clear issue description",
-      "fix": "specific actionable fix",
-      "codeSnippet": "problematic code or empty string"
-    }
-  ]
-}
-
-Focus areas: ${(rules || []).join(', ')}.
-Check: ESLint violations per config above, MongoDB anti-patterns (missing .lean() on reads, missing await, no error handling on DB ops, missing projections, unindexed queries), async/await bugs, unhandled promises, missing try/catch, TypeScript type safety, security issues (hardcoded secrets, NoSQL injection, unvalidated inputs), logic bugs, code style violations.`;
+  const systemPrompt = buildSystemPrompt(stack, rules, eslintBlock);
 
   const userMsg = [
     mrTitle  && `MR/PR: ${mrTitle}`,
