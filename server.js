@@ -267,9 +267,6 @@ app.post('/api/post-github-comment', async (req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`MR Review Assistant → http://localhost:${PORT}`);
-  listProviders().forEach(p => {
-    if (!p.available) console.warn(`  ⚠  ${p.id} provider not configured (${p.label})`);
-  });
   if (!GITLAB_TOKEN) console.warn('  ⚠  GITLAB_TOKEN not set in .env (GitLab post-comment disabled)');
   if (!GITHUB_TOKEN) console.warn('  ⚠  GITHUB_TOKEN not set in .env (GitHub post-comment disabled)');
 });

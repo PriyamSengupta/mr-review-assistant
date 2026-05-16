@@ -28,7 +28,12 @@ class OpenAIProvider {
     });
 
     const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
+    if (!res.ok) {
+      const msg = data.error?.message || `HTTP ${res.status}`;
+      if (res.status === 401 || res.status === 403) throw new Error(`Invalid OpenAI API key. ${msg}`);
+      if (res.status === 429) throw new Error(`OpenAI quota exceeded or rate limit reached. ${msg}`);
+      throw new Error(`OpenAI error: ${msg}`);
+    }
     const raw = data.choices?.[0]?.message?.content || '';
     return JSON.parse(raw);
   }

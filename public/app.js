@@ -85,7 +85,7 @@ document.querySelectorAll('.tab').forEach(t => {
     providers.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.available ? p.label : `${p.label} — not configured`;
+      opt.textContent = p.available ? p.label : `${p.label} — ${p.reason || 'not configured'}`;
       opt.disabled = !p.available;
       sel.appendChild(opt);
     });
