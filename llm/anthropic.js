@@ -26,7 +26,12 @@ class AnthropicProvider {
     });
 
     const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
+    if (!res.ok) {
+      const msg = data.error?.message || `HTTP ${res.status}`;
+      if (res.status === 401 || res.status === 403) throw new Error(`Invalid Anthropic API key. ${msg}`);
+      if (res.status === 429) throw new Error(`Anthropic quota exceeded or rate limit reached. ${msg}`);
+      throw new Error(`Anthropic error: ${msg}`);
+    }
     const raw = data.content?.find(b => b.type === 'text')?.text || '';
     return JSON.parse(raw.replace(/```json|```/g, '').trim());
   }

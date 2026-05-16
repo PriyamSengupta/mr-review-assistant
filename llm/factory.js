@@ -1,11 +1,13 @@
 const AnthropicProvider = require('./anthropic');
 const OpenAIProvider    = require('./openai');
 const GeminiProvider    = require('./gemini');
+const GrokProvider      = require('./grok');
 
 const registry = {
   anthropic: new AnthropicProvider(),
   openai:    new OpenAIProvider(),
-  gemini:    new GeminiProvider()
+  gemini:    new GeminiProvider(),
+  grok:      new GrokProvider()
 };
 
 function getProvider(name = 'anthropic') {

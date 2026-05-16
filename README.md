@@ -4,7 +4,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Models](https://img.shields.io/badge/models-Claude%20%7C%20GPT--4o%20%7C%20Gemini-orange)
+![Models](https://img.shields.io/badge/models-Claude%20%7C%20GPT--4o%20%7C%20Grok-orange)
 
 ---
 
@@ -28,7 +28,7 @@ Paste a GitLab MR or GitHub PR URL → get an instant AI-powered code review tai
 ### All stacks
 - TypeScript type safety, logic bugs, code style violations, security issues
 
-Choose your preferred AI model (Claude, GPT-4o, or Gemini) and after reviewing, **auto-post the result as a comment** directly on your GitLab MR or GitHub PR.
+Choose your preferred AI model (Claude, GPT-4o, or Grok) and after reviewing, **auto-post the result as a comment** directly on your GitLab MR or GitHub PR.
 
 ---
 
@@ -87,11 +87,14 @@ Copy `.env.example` to `.env` and fill in your values. This file is gitignored a
 
 ### LLM providers — configure at least one
 
-| Key | Model | Where to get it |
-|-----|-------|----------------|
-| `ANTHROPIC_API_KEY` | Claude Sonnet 4 | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
-| `OPENAI_API_KEY` | GPT-4o | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| `GEMINI_API_KEY` | Gemini 2.0 Flash | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
+| Key | Model | Free credits | Where to get it |
+|-----|-------|-------------|----------------|
+| `ANTHROPIC_API_KEY` | Claude Sonnet 4 | $5 for new accounts | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| `OPENAI_API_KEY` | GPT-4o | $5 for new accounts | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `XAI_API_KEY` | Grok 3 Mini | $25/month free | [console.x.ai](https://console.x.ai) |
+| `GEMINI_API_KEY` | Gemini 2.0 Flash Lite | Requires billing | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
+
+> Set at least one key. Providers without a key are greyed out in the UI. If a call fails (quota exceeded, insufficient credits, etc.), the error message from the API is shown directly in the UI.
 
 ### Source control tokens
 
@@ -113,7 +116,8 @@ The UI shows only the models you have configured. Unconfigured providers are gre
 |----------|-------|-------|
 | **Anthropic** | `claude-sonnet-4-20250514` | Default |
 | **OpenAI** | `gpt-4o` | Uses `response_format: json_object` |
-| **Google** | `gemini-2.0-flash` | Uses `responseMimeType: application/json` |
+| **xAI** | `grok-3-mini` | $25/month free for new accounts |
+| **Google** | `gemini-2.0-flash-lite` | Requires billing on Google Cloud project |
 
 To change a model version, edit the relevant file in `llm/`.
 
@@ -234,7 +238,8 @@ mr-review-assistant/
 │   ├── factory.js         # getProvider(name) / listProviders()
 │   ├── anthropic.js       # Claude Sonnet 4
 │   ├── openai.js          # GPT-4o
-│   └── gemini.js          # Gemini 2.0 Flash
+│   ├── grok.js            # Grok 3 Mini (xAI)
+│   └── gemini.js          # Gemini 2.0 Flash Lite
 └── public/                # Static frontend
     ├── index.html
     ├── styles.css
@@ -247,7 +252,7 @@ mr-review-assistant/
 
 - **Node.js + Express** — backend server, all API keys stay server-side
 - **Vanilla HTML/CSS/JS** — zero frontend dependencies, no build step
-- **LLM factory pattern** — pluggable provider architecture (Anthropic, OpenAI, Gemini)
+- **LLM factory pattern** — pluggable provider architecture (Anthropic, OpenAI, xAI/Grok)
 - **GitLab REST API v4** — fetch MR diffs and post review comments
 - **GitHub REST API** — fetch PR diffs and post review comments
 
@@ -257,7 +262,7 @@ mr-review-assistant/
 
 - [x] GitHub support (PRs)
 - [x] Node.js server (API keys never exposed to browser)
-- [x] Multi-LLM support — Claude, GPT-4o, Gemini via factory pattern
+- [x] Multi-LLM support — Claude, GPT-4o, Grok via factory pattern
 - [x] Frontend & Fullstack support — stack selector with tailored review prompts and chip sets
 - [ ] YouTrack integration — auto-update linked task status after review
 - [ ] Inline diff comments (line-level review notes)
